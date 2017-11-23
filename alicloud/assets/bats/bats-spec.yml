@@ -1,0 +1,24 @@
+---
+cpi: alicloud
+properties:
+  vip: ((external_1_ip_address))
+  second_static_ip: 172.16.0.102
+  pool_size: 1
+  stemcell:
+    name: ((stemcell_name))
+    version: latest
+  instances: 1
+  availability_zone: ((az))
+  key_name:  bosh-init
+  networks:
+    - name: default
+      static_ip: 172.16.0.104
+      type: manual
+      cidr: ((internal_cidr))
+      reserved:
+      - 172.16.0.2 - 172.16.0.9
+      static:
+      - 172.16.0.11 - 172.16.0.200
+      gateway: 172.16.0.1
+      security_group_id: ((security_group_id))
+      vswitch_id: ((subnet_id))
