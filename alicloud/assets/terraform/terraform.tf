@@ -105,7 +105,7 @@ resource "alicloud_slb" "e2e" {
   vswitch_id = "${alicloud_vswitch.alicloud_resources.id}"
   internet_charge_type = "paybytraffic"
 }
-resource "alicloud_slb_listener" "80-80" {
+resource "alicloud_slb_listener" "slb-80-80" {
     frontend_port = 80
     protocol = "http"
     backend_port = 80

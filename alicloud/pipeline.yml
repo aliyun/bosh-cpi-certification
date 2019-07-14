@@ -17,20 +17,18 @@ shared:
       OPTIONAL_OPS_FILE: |
         -o bosh-deployment/external-ip-with-registry-not-recommended.yml
         -o pipelines/shared/assets/ops/remove-provider-cert.yml
-
-  - &prepare-director-xenial
-    task: prepare-director
-    file: pipelines/shared/tasks/prepare-director.yml
-    params: &prepare-director-params
-      INFRASTRUCTURE:     alicloud
-      DIRECTOR_VARS_FILE: {{alicloud_director_vars_file}}
-      OPTIONAL_OPS_FILE: |
-        -o bosh-deployment/external-ip-with-registry-not-recommended.yml
-        -o pipelines/shared/assets/ops/remove-provider-cert.yml
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning the task prepare-director failed. Please check it."
 
   - &deploy-director
     task: deploy-director
     file: pipelines/shared/tasks/deploy-director.yml
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning the task deploy-director failed. Please check it."
 
   - &run-bats
     task: run-bats
@@ -40,6 +38,10 @@ shared:
       BAT_INFRASTRUCTURE: alicloud
       BAT_NETWORKING:     manual
       BAT_RSPEC_FLAGS:    "--tag ~multiple_manual_networks --tag ~raw_ephemeral_storage --tag ~persistent_disk"
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning the task run-bats failed. Please check it."
 
   - &test-stemcell-ubuntu-xenial
     task: test-stemcell-ubuntu-xenial
@@ -47,6 +49,10 @@ shared:
     params:
       BOSH_os_name: ubuntu-xenial
       package: ipv4director
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning task test-stemcell-ubuntu-xenial failed. Please check it."
 
   - &update-cloud-config
     task: update-cloud-config
@@ -54,6 +60,10 @@ shared:
     params: &update-cloud-config-params
       INFRASTRUCTURE: alicloud
       DIRECTOR_VARS_FILE: {{alicloud_director_vars_file}}
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning task update-cloud-config failed. Please check it."
 
   - &teardown
     task: teardown
@@ -66,12 +76,17 @@ shared:
       access_key: {{alicloud_access_key__primary}}
       secret_key: {{alicloud_secret_key__primary}}
       region:     {{alicloud_region__primary}}
-      access_key_id:     {{terraform_alicloud_access_key}}
-      secret_access_key: {{terraform_alicloud_secret_key}}
-      bucket:            {{terraform_bucket}}
-      region_name:       {{terraform_bucket_region}}
-      bucket_path: "state"
+      remote_state_access_key: {{terraform_backend_access_key}}
+      remote_state_secret_key: {{terraform_backend_secret_key}}
+      remote_state_bucket:     {{terraform_backend_bucket}}
+      remote_state_region:     {{terraform_backend_region}}
+      remote_state_file_path:  "bosh-cpi-certification"
       public_key: ((PUBLIC_KEY))
+      terraform_source: bosh-cpi-src/ci/assets/terraform
+    on_failure:
+      put: notify
+      params:
+        text: "[bosh-cpi-certification Failed]\nRunning task put-environment failed. Please check it."
 
 jobs:
   - name: test-stemcell-ubuntu-xenial
@@ -89,18 +104,12 @@ jobs:
         - {get: syslog-release,              trigger: false}
         - {get: os-conf-release,             trigger: false}
         - {get: bosh-linux-stemcell-builder, trigger: false}
-#      - get: environment
-#        version: {path: terraform.tfstate}
       - <<: *put-environment
         params:
           <<: *put-environment-params
           env_name: alicloud-test-stemcell-ubuntu-xenial
           delete_on_failure: true
-          generate_random_name: true
           terraform_source: pipelines/alicloud/assets/terraform
-#      - put: environment
-#        params:
-#          file: environment/(.*).tfstate
       - do:
         - <<: *prepare-director
           params:
@@ -124,9 +133,6 @@ jobs:
                 env_name: certify-alicloud-test-stemcell-ubuntu-xenial
                 action: destroy
                 terraform_source: pipelines/alicloud/assets/terraform
-#            - put: environment
-#              params:
-#                file: environment/(.*).tfstate
 
   - name: bats-ubuntu-xenial
     serial: true
@@ -144,19 +150,12 @@ jobs:
           trigger: false
           params:
             preserve_filename: true
-#      - get: environment
-#        params:
-#          file: state/terraform.tfstate
       - <<: *put-environment
         params:
           <<: *put-environment-params
           env_name: certify-alicloud-bats-ubuntu-xenial
           delete_on_failure: true
-          generate_random_name: true
           terraform_source: pipelines/alicloud/assets/terraform
-#      - put: environment
-#        params:
-#          file: environment/(.*).tfstate
       - do:
         - <<: *prepare-director
           params:
@@ -182,9 +181,6 @@ jobs:
                 env_name: certify-alicloud-bats-ubuntu-xenial
                 action: destroy
                 terraform_source: pipelines/alicloud/assets/terraform
-#            - put: environment
-#              params:
-#                file: environment/(.*).tfstate
 
   - name: certify-ubuntu-xenial
     serial: true
@@ -199,6 +195,14 @@ jobs:
         params:
           CPI_RELEASE_NAME: bosh-alicloud-cpi
           STEMCELL_NAME:    bosh-alicloud-kvm-ubuntu-xenial-go_agent
+        on_success:
+          put: notify
+          params:
+            text: "[bosh-cpi-certification Success]\nRunning task certify-ubuntu-xenial success."
+        on_failure:
+          put: notify
+          params:
+            text: "[bosh-cpi-certification Failed]\nRunning task certify-ubuntu-xenial failed. Please check it."
       - {put: receipt, params: {file: certification/*-receipt.json}}
 
 resource_types:
@@ -207,6 +211,11 @@ resource_types:
     source:
       repository: ljfranklin/terraform-resource
 
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+
 resources:
   - name: after-midnight
     type: time
@@ -214,10 +223,10 @@ resources:
       start: 00:00 AM
       stop: 11:00 PM
       location: {{time_location}}
-#  - name: bosh-cpi-src
+#  - name: bosh-cpi-src-in
 #    type: git
 #    source:
-#      uri: https://github.com/cloudfoundry-incubator/bosh-alicloud-cpi-release.git
+#      uri: https://github.com/xiaozhu36/bosh-alicloud-cpi-release.git
 #      branch: master
 #      paths:
 #        - ci/**
@@ -238,10 +247,10 @@ resources:
   - name: cpi-release
     type: github-release
     source:
-      owner: xiaozhu36
+      owner: cloudfoundry-incubator
       repository: bosh-alicloud-cpi-release
-#      insecure: true
-#      version: { tag: 'V20' }
+      insecure: true
+      tag_filter: "v(.*)"
   - name: bosh-release
     type: bosh-io-release
     source:
@@ -276,31 +285,6 @@ resources:
       regexp: .*-(\d+)-receipt\.json
       region_name: {{certification__bucket_region}}
       endpoint: oss-((certification__bucket_region)).aliyuncs.com
-#  - name: environment
-#    type: s3
-#    source:
-#      access_key_id:     {{terraform_alicloud_access_key}}
-#      secret_access_key: {{terraform_alicloud_secret_key}}
-#      bucket:            {{terraform_bucket}}
-#      regexp:            (.*)\.tfstate
-#      region_name:       {{terraform_bucket_region}}
-#      endpoint:          oss-((terraform_bucket_region)).aliyuncs.com
-#      initial_path:      terraform0.tfstate
-
-#  - name: environment
-#    type: terraform_type
-#    source:
-#      storage:
-#        access_key_id:     {{terraform_alicloud_access_key}}
-#        secret_access_key: {{terraform_alicloud_secret_key}}
-#        bucket:            {{terraform_bucket}}
-#        bucket_path:       terraform-state
-#        region_name:       {{terraform_bucket_region}}
-#      vars:
-#        access_key: {{alicloud_access_key__primary}}
-#        secret_key: {{alicloud_secret_key__primary}}
-#        region:     {{alicloud_region__primary}}
-
   - name: bosh-linux-stemcell-builder
     type: git
     source:
@@ -315,3 +299,8 @@ resources:
     type: bosh-io-release
     source:
       repository: cloudfoundry/os-conf-release
+
+  - name: notify
+    type: slack-notification
+    source:
+      url: ((slack-webhook))
