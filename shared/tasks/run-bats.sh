@@ -31,6 +31,12 @@ chmod 600 $ssh_key_path
 export BOSH_GW_PRIVATE_KEY=$ssh_key_path
 
 pushd bats
+  # mock: alicloud does not support disk size less than 20GB
+  if [ ${INFRASTRUCTURE} == "alicloud" ];
+  then
+    sed -ig "s/2048/20480/" ./spec/system/with_release_stemcell_spec.rb
+    sed -ig "s/4096/40960/" ./spec/system/with_release_stemcell_spec.rb
+  fi
   bundle install
   bundle exec rspec spec $BAT_RSPEC_FLAGS
 popd

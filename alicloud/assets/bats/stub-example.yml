@@ -1,0 +1,64 @@
+---
+name: bat
+releases:
+- name: bat
+  version: latest
+compilation:
+  workers: 2
+  network: default
+  reuse_compilation_vms: true
+  cloud_properties:
+    instance_type: ecs.mn4.large
+    availability_zone: cn-beijing-a
+    instance_name: bosh-director-bats
+update:
+  canaries: 1
+  canary_watch_time: 3000-90000
+  update_watch_time: 3000-90000
+  max_in_flight: 1
+networks:
+- name: static
+  type: vip
+- name: default
+  type: manual
+  subnets:
+  - range: 172.16.0.0/24
+    reserved:
+    - 172.16.0.2 - 172.16.0.9
+    static:
+    - 172.16.0.11 - 172.16.0.200
+    gateway: 172.16.0.1
+    dns:
+    - 39.106.12.161
+    cloud_properties:
+      security_group_id: sg-2ze90jwvj8z93tpzwk1f
+      vswitch_id: vsw-2zesrslucyh6326rilr3n
+resource_pools:
+- name: common
+  network: default
+  size: 1
+  stemcell:
+    name: bosh-alicloud-kvm-ubuntu-trusty-go_agent
+    version: '1008'
+  cloud_properties:
+    instance_type: ecs.mn4.large
+    availability_zone: cn-beijing-a
+jobs:
+- name: batlight
+  templates:
+  - name: batlight
+  instances: 1
+  resource_pool: common
+  networks:
+  - name: default
+    default:
+    - dns
+    - gateway
+    static_ips:
+    - 172.16.0.104
+  - name: static
+    static_ips:
+    - 39.106.7.105
+properties:
+  batlight:
+    missing: nope
