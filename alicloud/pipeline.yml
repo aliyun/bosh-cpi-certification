@@ -221,13 +221,13 @@ resources:
   - name: pipelines
     type: git
     source:
-      uri: https://github.com/cloudfoundry-incubator/bosh-cpi-certification
-      branch: master
+      uri: https://github.com/aliyun/bosh-cpi-certification
+      branch: xiaozhu
   - name: bosh-deployment
     type: git
     source:
-      uri: https://github.com/cloudfoundry/bosh-deployment
-      branch: master
+      uri: https://github.com/aliyun/bosh-deployment
+      branch: dev
   - name: cpi-release
     type: github-release
     source:
@@ -242,8 +242,8 @@ resources:
   - name: bats
     type: git
     source:
-      uri: https://github.com/cloudfoundry/bosh-acceptance-tests
-      branch: master
+      uri: https://github.com/aliyun/bosh-acceptance-tests.git
+      branch: alicloud
   - name: ubuntu-xenial-stemcell
     type: bosh-io-stemcell
     source:
@@ -267,8 +267,9 @@ resources:
   - name: bosh-linux-stemcell-builder
     type: git
     source:
-      uri: https://github.com/cloudfoundry/bosh-linux-stemcell-builder
-      branch: master
+      uri: https://github.com/aliyun/bosh-linux-stemcell-builder
+#      aliyun-xenial branch modifyed the bosh-linux-stemcell-builder/src/github.com/cloudfoundry/stemcell-acceptance-tests/ipv4director/smoke/smoke_test.go:92
+      branch: aliyun-xenial
   - name: syslog-release
     type: bosh-io-release
     source:
